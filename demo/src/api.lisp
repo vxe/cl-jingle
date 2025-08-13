@@ -31,7 +31,11 @@
   (:import-from :local-time)
   (:import-from :cl-ppcre)
   (:export
-   :register-urls))
+   :register-urls
+   :restart-server
+   :reload-code
+   :quick-restart
+   :refresh-routes-handler))
 (in-package :jingle.demo.api)
 
 (define-condition api-error (jingle:base-http-error)
@@ -223,7 +227,53 @@ demo."
   (jingle:with-json-response
     (restart-server-handler)))
 
-;; Define parameter-aware handler functions
+;; Hot-reloadable parameter-aware handler functions
+(defun fortune-handler-v2 (&key category mood)
+  "Fortune handler with mood support - hot-reloadable"
+  (format t "~%DEBUG: Fortune handler v2 called with category=~A mood=~A~%" category mood)
+  (let* ((fortunes (case (intern (string-upcase category) :keyword)
+                     (:wisdom '("The journey of a thousand miles begins with one step."
+                               "Knowledge is power, but practice is mastery."
+                               "A wise person learns from the mistakes of others."))
+                     (:humor '("I told my wife she was drawing her eyebrows too high. She looked surprised."
+                              "Why don't scientists trust atoms? Because they make up everything!"
+                              "I'm reading a book about anti-gravity. It's impossible to put down!"))
+                     (:programming '("There are only two hard things in Computer Science: cache invalidation and naming things."
+                                    "Code never lies, comments sometimes do."
+                                    "Any fool can write code that a computer can understand. Good programmers write code that humans can understand."))
+                     (t '("Today is a good day to try something new."
+                         "Fortune favors the bold."
+                         "Every expert was once a beginner."))))
+         (fortune (nth (random (length fortunes)) fortunes))
+         (formatted-fortune (case (intern (string-upcase mood) :keyword)
+                              (:excited (format nil "🎉 ~A 🚀" fortune))
+                              (:zen (format nil "🧘 ~A ☯️" fortune))
+                              (:dramatic (format nil "⚡ ~A ⚡" (string-upcase fortune)))
+                              (:whisper (format nil "🤫 ~A..." (string-downcase fortune)))
+                              (t fortune))))
+    (format t "DEBUG: formatted-fortune = ~A~%" formatted-fortune)
+    (list :|fortune| formatted-fortune
+          :|category| category
+          :|mood| mood
+          :|available_moods| '("normal" "excited" "zen" "dramatic" "whisper")
+          :|timestamp| (local-time:now))))
+
+(defun calculate-handler-v2 (&key a b operation)
+  "Calculate handler - hot-reloadable"
+  (format t "~%DEBUG: Calculate handler v2 called with a=~A b=~A operation=~A~%" a b operation)
+  (let ((result (case (intern (string-upcase operation) :keyword)
+                  (:add (+ a b))
+                  (:subtract (- a b))
+                  (:multiply (* a b))
+                  (:divide (if (zerop b) 
+                             (error 'api-error :code :bad-request :body "division by zero")
+                             (/ a b)))
+                  (t (error 'api-error :code :bad-request :body "unsupported operation")))))
+    (list :|a| a
+          :|b| b
+          :|operation| operation
+          :|result| result
+          :|timestamp| (local-time:now))))
 (defun echo-handler (&key name email)
   (let ((analysis (format nil "Processing ~A at ~A" name email)))
     (list :|received| (list :|name| name :|email| email)
@@ -305,13 +355,37 @@ demo."
                          (:thread-ts string)
                          (:token string))))
     
-    (:method :POST :path "/api/v1/calculate" :handler ,#'calculate-wrapper :name "calculate"
+    (:method :POST :path "/api/v1/calculate" :name "calculate"
      :parameters (:body ((:a integer)
                          (:b integer)
-                         (:operation string))))
+                         (:operation string)))
+     :handler (lambda (&key a b operation)
+                (format t "~%DEBUG: Lambda called with a=~A b=~A operation=~A~%" a b operation)
+                (format t "DEBUG: operation type: ~A~%" (type-of operation))
+                (format t "DEBUG: operation string-upcase: ~A~%" (string-upcase operation))
+                (let ((operation-keyword (intern (string-upcase operation) :keyword)))
+                  (format t "DEBUG: operation interned: ~A~%" operation-keyword)
+                  (format t "DEBUG: operation keyword equal to :ADD? ~A~%" (eq operation-keyword :add))
+                  (let ((result (case operation-keyword
+                                  (:add (+ a b))
+                                  (:subtract (- a b))
+                                  (:multiply (* a b))
+                                  (:divide (if (zerop b) 
+                                             (error 'api-error :code :bad-request :body "division by zero")
+                                             (/ a b)))
+                                  (t (progn
+                                       (format t "DEBUG: CASE fell through to default, operation-keyword was: ~A~%" operation-keyword)
+                                       (error 'api-error :code :bad-request :body "unsupported operation"))))))
+                    (list :|a| a
+                          :|b| b
+                          :|operation| operation
+                          :|result| result
+                          :|timestamp| (local-time:now))))))
     
-    (:method :GET :path "/api/v1/fortune" :handler ,#'fortune-wrapper :name "fortune"
-     :parameters (:query ((:category string :optional t :default "general"))))
+    (:method :GET :path "/api/v1/fortune" :name "fortune"
+     :parameters (:query ((:category string :optional t :default "general")
+                          (:mood string :optional t :default "normal")))
+     :handler fortune-handler-v2)
     
     (:method :POST :path "/api/v1/refresh-routes" :handler ,#'refresh-routes-wrapper :name "refresh-routes"
      :parameters ())
@@ -533,23 +607,30 @@ demo."
 
 (defun extract-parameters (param-spec raw-params)
   "Extracts parameters according to specification and returns as plist"
+  (format t "~%DEBUG: extract-parameters called with param-spec: ~A~%" param-spec)
+  (format t "DEBUG: raw-params: ~A~%" raw-params)
   (let ((result '()))
     (when param-spec
       (loop for i from 0 below (length param-spec) by 2
             for location = (nth i param-spec)
             for params = (nth (1+ i) param-spec)
-            do (loop for param-def in params
-                     for param-name = (first param-def)
-                     for param-type = (second param-def)
-                     for optional-p = (member :optional param-def)
-                     for default-val = (getf param-def :default)
-                     for value = (case location
-                                   (:path (jingle:get-request-param raw-params param-name))
-                                   (:query (jingle:get-request-param raw-params (string param-name) default-val))
-                                   (:body (extract-body-param param-name param-type)))
-                     do (when (or value (not optional-p))
-                          (push (parse-param-value value param-type) result)
-                          (push param-name result)))))
+            do (progn
+                 (format t "DEBUG: Processing location ~A with params ~A~%" location params)
+                 (loop for param-def in params
+                       for param-name = (first param-def)
+                       for param-type = (second param-def)
+                       for optional-p = (member :optional param-def)
+                       for default-val = (getf param-def :default)
+                       for value = (case location
+                                     (:path (jingle:get-request-param raw-params param-name))
+                                     (:query (jingle:get-request-param raw-params (string-downcase (string param-name)) default-val))
+                                     (:body (extract-body-param param-name param-type)))
+                       do (progn
+                            (format t "DEBUG: param ~A type ~A value ~A optional ~A~%" param-name param-type value optional-p)
+                            (when (or value (not optional-p))
+                              (push param-name result)
+                              (push (parse-param-value value param-type) result)))))))
+    (format t "DEBUG: extract-parameters result: ~A~%" result)
     (nreverse result)))
 
 (defun extract-body-param (param-name param-type)
@@ -557,7 +638,12 @@ demo."
   (let* ((content (babel:octets-to-string (jingle:request-content jingle:*request*)))
          (body (when (and content (> (length content) 0))
                  (decode-json-or-throw-bad-request content))))
-    (getf body (intern (string-upcase param-name) :keyword))))
+    (format t "DEBUG: extract-body-param ~A - content: ~A~%" param-name content)
+    (format t "DEBUG: extract-body-param ~A - body: ~A~%" param-name body)
+    (let ((result (getf body (intern (string-downcase (string param-name)) :keyword))))
+      (format t "DEBUG: extract-body-param ~A - looking for key: ~A~%" param-name (intern (string-downcase (string param-name)) :keyword))
+      (format t "DEBUG: extract-body-param ~A - result: ~A~%" param-name result)
+      result)))
 
 (defun parse-param-value (value param-type)
   "Parses parameter value according to type"
@@ -577,7 +663,17 @@ demo."
       ;; Extract parameters according to spec and call handler with keyword args
       (let ((extracted-params (extract-parameters param-spec raw-params)))
         (jingle:with-json-response
-          (apply handler-fn extracted-params))))))
+          (cond
+            ((functionp handler-fn)
+             (apply handler-fn extracted-params))
+            ((symbolp handler-fn)
+             ;; It's a function symbol, call it directly
+             (apply handler-fn extracted-params))
+            ((and (listp handler-fn) (eq (first handler-fn) 'lambda))
+             ;; It's a lambda expression, eval it first to get a function
+             (apply (eval handler-fn) extracted-params))
+            (t
+             (error "Handler must be a function, symbol, or lambda expression"))))))))
 
 (defparameter *current-app* nil "Store reference to current app for dynamic updates")
 
@@ -600,6 +696,31 @@ demo."
           :|total_routes| (length *urls*)
           :|timestamp| (local-time:now))))
 
+(defun reload-code ()
+  "Reloads the API code without restarting the server"
+  (format t "~%Reloading code...~%")
+  (handler-case
+      (progn
+        ;; Save current app reference before reload
+        (let ((saved-app *current-app*))
+          ;; Force redefinition of *urls*
+          (when (boundp '*urls*)
+            (makunbound '*urls*))
+          ;; Reload the file
+          (load (merge-pathnames "demo/src/api.lisp" 
+                                 (asdf:system-source-directory :jingle.demo)))
+          ;; Restore app reference after reload
+          (setf *current-app* saved-app))
+        (format t "✅ Code reloaded successfully!~%")
+        ;; Refresh routes with new code
+        (when *current-app*
+          (let ((result (refresh-routes-handler)))
+            (format t "📊 ~A~%" (getf result :|message|))))
+        t)
+    (error (e)
+      (format t "❌ Error reloading code: ~A~%" e)
+      nil)))
+
 (defun restart-server (&optional (port 8080))
   "Restarts the server on the given port (default 8080)"
   (format t "~%Restarting server...~%")
@@ -613,10 +734,11 @@ demo."
       (error (e)
         (format t "Warning: Error stopping server: ~A~%" e))))
   
+  ;; Clear app reference
+  (setf *current-app* nil)
+  
   ;; Reload code to pick up any changes
-  (format t "Reloading code...~%")
-  (load (merge-pathnames "demo/src/api.lisp" 
-                         (asdf:system-source-directory :jingle.demo)))
+  (reload-code)
   
   ;; Create and start new server
   (format t "Starting new server on port ~A...~%" port)
@@ -653,11 +775,13 @@ demo."
     ;; Add refresh endpoint
     (setf (jingle:route app "/api/v1/refresh-routes" :method :post) #'refresh-routes-handler)
     
-    ;; Register routes from *urls*
+    ;; Register routes from *urls* with parameter-aware handling
     (loop :for route-spec :in *urls*
           :for path = (getf route-spec :path)
           :for method = (getf route-spec :method)
           :for name = (getf route-spec :name)
-          :for handler = (getf route-spec :handler) :do
+          :for handler = (if (getf route-spec :parameters)
+                             (create-parameter-aware-handler route-spec)
+                             (getf route-spec :handler)) :do
             (setf (jingle:route app path :method method :identifier name) handler))
     t))
