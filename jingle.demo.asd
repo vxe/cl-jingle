@@ -49,7 +49,8 @@
                :dexador
                :quri
                :cl-ascii-table
-               :babel)
+               :babel
+               :cl-ppcre)
   :components ((:module "swagger-ui-dist"
                 :pathname #P"swagger-ui/"
                 :components ((:static-file "favicon-16x16.png")
