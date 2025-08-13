@@ -250,12 +250,13 @@ demo."
                               (:zen (format nil "🧘 ~A ☯️" fortune))
                               (:dramatic (format nil "⚡ ~A ⚡" (string-upcase fortune)))
                               (:whisper (format nil "🤫 ~A..." (string-downcase fortune)))
+                              (:magical (format nil "✨🔮 ~A 🔮✨" fortune)) ; <-- NEW MOOD!
                               (t fortune))))
     (format t "DEBUG: formatted-fortune = ~A~%" formatted-fortune)
     (list :|fortune| formatted-fortune
           :|category| category
           :|mood| mood
-          :|available_moods| '("normal" "excited" "zen" "dramatic" "whisper")
+          :|available_moods| '("normal" "excited" "zen" "dramatic" "whisper" "magical") ; <-- UPDATED LIST!
           :|timestamp| (local-time:now))))
 
 (defun calculate-handler-v2 (&key a b operation)
@@ -329,7 +330,7 @@ demo."
           :|category| category
           :|timestamp| (local-time:now))))
 
-;; Force redefinition of *urls* 
+;; Force redefinition of *urls* but preserve *current-app*
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (when (boundp '*urls*)
     (makunbound '*urls*)))
@@ -343,55 +344,63 @@ demo."
     
     ;; DRY parameter-aware routes using wrapper functions
     (:method :POST :path "/api/v1/echo" :handler ,#'echo-wrapper :name "echo"
-     :parameters (:query ((:name string) (:email string))))
+      :parameters (:query ((:name string) (:email string))))
     
     (:method :GET :path "/api/v1/greet/:name" :handler ,#'greet-wrapper :name "greet"
-     :parameters (:path ((:name string))
-                  :query ((:greeting string :optional t :default "Hello"))))
+      :parameters (:path ((:name string))
+                   :query ((:greeting string :optional t :default "Hello"))))
     
     (:method :POST :path "/api/v1/runbook-read" :handler ,#'runbook-read-wrapper :name "runbook-read"
-     :parameters (:body ((:query string)
-                         (:channel string)
-                         (:thread-ts string)
-                         (:token string))))
+      :parameters (:body ((:query string)
+                          (:channel string)
+                          (:thread-ts string)
+                          (:token string))))
     
     (:method :POST :path "/api/v1/calculate" :name "calculate"
-     :parameters (:body ((:a integer)
-                         (:b integer)
-                         (:operation string)))
-     :handler (lambda (&key a b operation)
-                (format t "~%DEBUG: Lambda called with a=~A b=~A operation=~A~%" a b operation)
-                (format t "DEBUG: operation type: ~A~%" (type-of operation))
-                (format t "DEBUG: operation string-upcase: ~A~%" (string-upcase operation))
-                (let ((operation-keyword (intern (string-upcase operation) :keyword)))
-                  (format t "DEBUG: operation interned: ~A~%" operation-keyword)
-                  (format t "DEBUG: operation keyword equal to :ADD? ~A~%" (eq operation-keyword :add))
-                  (let ((result (case operation-keyword
-                                  (:add (+ a b))
-                                  (:subtract (- a b))
-                                  (:multiply (* a b))
-                                  (:divide (if (zerop b) 
-                                             (error 'api-error :code :bad-request :body "division by zero")
-                                             (/ a b)))
-                                  (t (progn
-                                       (format t "DEBUG: CASE fell through to default, operation-keyword was: ~A~%" operation-keyword)
-                                       (error 'api-error :code :bad-request :body "unsupported operation"))))))
-                    (list :|a| a
-                          :|b| b
-                          :|operation| operation
-                          :|result| result
-                          :|timestamp| (local-time:now))))))
+      :parameters (:body ((:a integer)
+                          (:b integer)
+                          (:operation string)))
+      :handler (lambda (&key a b operation)
+                 (format t "~%DEBUG: Lambda called with a=~A b=~A operation=~A~%" a b operation)
+                 (format t "DEBUG: operation type: ~A~%" (type-of operation))
+                 (format t "DEBUG: operation string-upcase: ~A~%" (string-upcase operation))
+                 (let ((operation-keyword (intern (string-upcase operation) :keyword)))
+                   (format t "DEBUG: operation interned: ~A~%" operation-keyword)
+                   (format t "DEBUG: operation keyword equal to :ADD? ~A~%" (eq operation-keyword :add))
+                   (let ((result (case operation-keyword
+                                   (:add (+ a b))
+                                   (:subtract (- a b))
+                                   (:multiply (* a b))
+                                   (:divide (if (zerop b) 
+                                                (error 'api-error :code :bad-request :body "division by zero")
+                                                (/ a b)))
+                                   (t (progn
+                                        (format t "DEBUG: CASE fell through to default, operation-keyword was: ~A~%" operation-keyword)
+                                        (error 'api-error :code :bad-request :body "unsupported operation"))))))
+                     (list :|a| a
+                           :|b| b
+                           :|operation| operation
+                           :|result| result
+                           :|timestamp| (local-time:now))))))
     
     (:method :GET :path "/api/v1/fortune" :name "fortune"
-     :parameters (:query ((:category string :optional t :default "general")
+      :parameters (:query ((:category string :optional t :default "general")
+                           (:mood string :optional t :default "normal")))
+      :handler fortune-handler-v2)
+
+    (:method :GET :path "/api/v1/fortune-2" :name "fortune-2"
+          :parameters (:query ((:category string :optional t :default "general")
                           (:mood string :optional t :default "normal")))
      :handler fortune-handler-v2)
-    
+    (:method :GET :path "/api/v1/fortune-3" :name "fortune-3"
+          :parameters (:query ((:category string :optional t :default "general")
+                          (:mood string :optional t :default "normal")))
+     :handler fortune-handler-v2)
     (:method :POST :path "/api/v1/refresh-routes" :handler ,#'refresh-routes-wrapper :name "refresh-routes"
-     :parameters ())
+      :parameters ())
     
     (:method :POST :path "/api/v1/restart-server" :handler ,#'restart-server-wrapper :name "restart-server"
-     :parameters ()))
+      :parameters ()))
   "The URLs map of our API")
 
 (defun test-endpoint-handler (params)
@@ -675,7 +684,10 @@ demo."
             (t
              (error "Handler must be a function, symbol, or lambda expression"))))))))
 
-(defparameter *current-app* nil "Store reference to current app for dynamic updates")
+;; Preserve *current-app* during reload - only initialize if unbound
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (unless (boundp '*current-app*)
+    (defvar *current-app* nil "Store reference to current app for dynamic updates")))
 
 (defun refresh-routes-handler ()
   "Refreshes all routes from *urls* without server restart"
