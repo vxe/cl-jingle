@@ -1,0 +1,47 @@
+#!/bin/bash
+
+# {{PROJECT_NAME}} Server Launcher
+# Starts the Swagger UI development server
+
+set -e
+
+PROJECT_NAME="{{PROJECT_NAME}}"
+PORT="${PORT:-8080}"
+
+echo "🚀 Starting $PROJECT_NAME server..."
+
+# Check if SBCL is available
+if ! command -v sbcl &> /dev/null; then
+    echo "❌ Error: SBCL not found. Please install SBCL first."
+    echo "   On macOS: brew install sbcl"
+    echo "   On Ubuntu: sudo apt-get install sbcl"
+    exit 1
+fi
+
+# Check if Quicklisp is available
+if [ ! -d "$HOME/quicklisp" ]; then
+    echo "❌ Error: Quicklisp not found at $HOME/quicklisp"
+    echo "   Please install Quicklisp first: https://www.quicklisp.org/beta/"
+    exit 1
+fi
+
+echo "📦 Loading Common Lisp system: $PROJECT_NAME"
+echo "🌐 Server will be available at: http://localhost:$PORT"
+echo "📋 Swagger UI: http://localhost:$PORT/api/docs/"
+echo "🔧 API JSON: http://localhost:$PORT/api/v1/swagger.json"
+echo ""
+echo "💡 To stop the server, press Ctrl+C"
+echo "💡 To restart during development, use: ({{PROJECT_NAME}}.api:restart-server)"
+echo ""
+
+# Add current directory to ASDF registry so it can find the .asd file
+export CL_SOURCE_REGISTRY="$(pwd):$CL_SOURCE_REGISTRY"
+
+# Start the server
+exec sbcl --load "$HOME/quicklisp/setup.lisp" \
+          --eval "(push #p\"$(pwd)/\" asdf:*central-registry*)" \
+          --eval "(ql:quickload :$PROJECT_NAME)" \
+          --eval "({{PROJECT_NAME}}.server:start-server $PORT)" \
+          --eval "(format t \"~%✅ Server started successfully!~%\")" \
+          --eval "(format t \"📋 Open http://localhost:$PORT/api/docs/ in your browser~%~%\")" \
+          --eval "(loop (sleep 1))"
