@@ -185,37 +185,11 @@ demo."
         :|note| "Or use the REPL restart sequence"
         :|timestamp| (local-time:now)))
 
-;; Create wrapper functions that jingle can call with params
-(defun echo-wrapper (params)
-  (jingle:with-json-response
-    (let ((extracted-params (extract-parameters '(:query ((:name string) (:email string))) params)))
-      (apply #'echo-handler extracted-params))))
+;; Keep only the wrapper functions that are still used
 
-(defun greet-wrapper (params)
-  (jingle:with-json-response
-    (let ((extracted-params (extract-parameters '(:path ((:name string))
-                                                  :query ((:greeting string :optional t :default "Hello"))) params)))
-      (apply #'greet-handler extracted-params))))
 
-(defun runbook-read-wrapper (params)
-  (jingle:with-json-response
-    (let ((extracted-params (extract-parameters '(:body ((:query string)
-                                                          (:channel string)
-                                                          (:thread-ts string)
-                                                          (:token string))) params)))
-      (apply #'runbook-read-handler extracted-params))))
 
-(defun calculate-wrapper (params)
-  (jingle:with-json-response
-    (let ((extracted-params (extract-parameters '(:body ((:a integer)
-                                                          (:b integer)
-                                                          (:operation string))) params)))
-      (apply #'calculate-handler extracted-params))))
 
-(defun fortune-wrapper (params)
-  (jingle:with-json-response
-    (let ((extracted-params (extract-parameters '(:query ((:category string :optional t :default "general"))) params)))
-      (apply #'fortune-handler extracted-params))))
 
 (defun refresh-routes-wrapper (params)
   (declare (ignore params))
@@ -275,60 +249,10 @@ demo."
           :|operation| operation
           :|result| result
           :|timestamp| (local-time:now))))
-(defun echo-handler (&key name email)
-  (let ((analysis (format nil "Processing ~A at ~A" name email)))
-    (list :|received| (list :|name| name :|email| email)
-          :|analysis| analysis
-          :|timestamp| (local-time:now)
-          :|status| "processed")))
 
-(defun greet-handler (&key name greeting)
-  (let ((message (format nil "~A, ~A!" greeting name)))
-    (list :|message| message
-          :|timestamp| (local-time:now))))
 
-(defun runbook-read-handler (&key query channel thread-ts token)
-  (let ((slack-url (format nil "https://slack.com/~A" channel))
-        (analysis (format nil "Analyzing query: ~A" query)))
-    (list :|status| 200
-          :|body| (list :|query| query
-                        :|channel| channel
-                        :|thread-ts| thread-ts
-                        :|slack-url| slack-url
-                        :|analysis| analysis))))
 
-(defun calculate-handler (&key a b operation)
-  (let ((result (case (intern (string-upcase operation) :keyword)
-                  (:add (+ a b))
-                  (:subtract (- a b))
-                  (:multiply (* a b))
-                  (:divide (if (zerop b) 
-                             (error 'api-error :code :bad-request :body "division by zero")
-                             (/ a b)))
-                  (t (error 'api-error :code :bad-request :body "unsupported operation")))))
-    (list :|a| a
-          :|b| b
-          :|operation| operation
-          :|result| result
-          :|timestamp| (local-time:now))))
 
-(defun fortune-handler (&key category)
-  (let ((fortunes (case (intern (string-upcase category) :keyword)
-                    (:wisdom '("The journey of a thousand miles begins with one step."
-                              "Knowledge is power, but practice is mastery."
-                              "A wise person learns from the mistakes of others."))
-                    (:humor '("I told my wife she was drawing her eyebrows too high. She looked surprised."
-                             "Why don't scientists trust atoms? Because they make up everything!"
-                             "I'm reading a book about anti-gravity. It's impossible to put down!"))
-                    (:programming '("There are only two hard things in Computer Science: cache invalidation and naming things."
-                                   "Code never lies, comments sometimes do."
-                                   "Any fool can write code that a computer can understand. Good programmers write code that humans can understand."))
-                    (t '("Today is a good day to try something new."
-                        "Fortune favors the bold."
-                        "Every expert was once a beginner.")))))
-    (list :|fortune| (nth (random (length fortunes)) fortunes)
-          :|category| category
-          :|timestamp| (local-time:now))))
 
 ;; Force redefinition of *urls* but preserve *current-app*
 (eval-when (:compile-toplevel :load-toplevel :execute)
@@ -343,22 +267,45 @@ demo."
     (:method :DELETE :path "/api/v1/product/:id" :handler ,#'delete-product-by-id-handler :name "delete-product-by-id")
     
     ;; DRY parameter-aware routes using wrapper functions
-    (:method :POST :path "/api/v1/echo" :handler ,#'echo-wrapper :name "echo"
-      :parameters (:query ((:name string) (:email string))))
+    (:method :POST
+        :path "/api/v1/echo"
+      :name "echo"
+      :parameters (:query ((:name string)
+                          (:email string)))
+      :handler (lambda (&key name email)
+                 (list :|name| name
+                       :|email| email)
+                 )
+      
+      )
     
-    (:method :GET :path "/api/v1/greet/:name" :handler ,#'greet-wrapper :name "greet"
+    (:method :GET :path "/api/v1/greet/:name" :name "greet"
       :parameters (:path ((:name string))
-                   :query ((:greeting string :optional t :default "Hello"))))
+                   :query ((:greeting string :optional t :default "Hello")))
+      :handler (lambda (&key name greeting)
+                 (let ((message (format nil "~A, ~A!" greeting name)))
+                   (list :|message| message
+                         :|timestamp| (local-time:now)))))
     
-    (:method :POST :path "/api/v1/runbook-read" :handler ,#'runbook-read-wrapper :name "runbook-read"
+    (:method :POST :path "/api/v1/runbook-read" :name "runbook-read"
       :parameters (:body ((:query string)
                           (:channel string)
                           (:thread-ts string)
-                          (:token string))))
+                          (:token string)))
+      :handler (lambda (&key query channel thread-ts token)
+                 (let ((slack-url (format nil "https://slack.com/~A" channel))
+                       (analysis (format nil "Analyzing query: ~A" query)))
+                   (list :|status| 200
+                         :|body| (list :|query| query
+                                       :|channel| channel
+                                       :|thread-ts| thread-ts
+                                       :|slack-url| slack-url
+                                       :|analysis| analysis)))))
     
     (:method :POST :path "/api/v1/calculate" :name "calculate"
       :parameters (:body ((:a integer)
                           (:b integer)
+                          (:c integer)
                           (:operation string)))
       :handler (lambda (&key a b operation)
                  (format t "~%DEBUG: Lambda called with a=~A b=~A operation=~A~%" a b operation)
@@ -379,6 +326,7 @@ demo."
                                         (error 'api-error :code :bad-request :body "unsupported operation"))))))
                      (list :|a| a
                            :|b| b
+                           :|c| c
                            :|operation| operation
                            :|result| result
                            :|timestamp| (local-time:now))))))
@@ -386,7 +334,33 @@ demo."
     (:method :GET :path "/api/v1/fortune" :name "fortune"
       :parameters (:query ((:category string :optional t :default "general")
                            (:mood string :optional t :default "normal")))
-      :handler fortune-handler-v2)
+      :handler (lambda (&key category mood)
+                 (let* ((fortunes (case (intern (string-upcase category) :keyword)
+                                    (:wisdom '("The journey of a thousand miles begins with one step."
+                                              "Knowledge is power, but practice is mastery."
+                                              "A wise person learns from the mistakes of others."))
+                                    (:humor '("I told my wife she was drawing her eyebrows too high. She looked surprised."
+                                             "Why don't scientists trust atoms? Because they make up everything!"
+                                             "I'm reading a book about anti-gravity. It's impossible to put down!"))
+                                    (:programming '("There are only two hard things in Computer Science: cache invalidation and naming things."
+                                                   "Code never lies, comments sometimes do."
+                                                   "Any fool can write code that a computer can understand. Good programmers write code that humans can understand."))
+                                    (t '("Today is a good day to try something new."
+                                        "Fortune favors the bold."
+                                        "Every expert was once a beginner."))))
+                        (fortune (nth (random (length fortunes)) fortunes))
+                        (formatted-fortune (case (intern (string-upcase mood) :keyword)
+                                             (:excited (format nil "🎉 ~A 🚀" fortune))
+                                             (:zen (format nil "🧘 ~A ☯️" fortune))
+                                             (:dramatic (format nil "⚡ ~A ⚡" (string-upcase fortune)))
+                                             (:whisper (format nil "🤫 ~A..." (string-downcase fortune)))
+                                             (:magical (format nil "✨🔮 ~A 🔮✨" fortune))
+                                             (t fortune))))
+                   (list :|fortune| formatted-fortune
+                         :|category| category
+                         :|mood| mood
+                         :|available_moods| '("normal" "excited" "zen" "dramatic" "whisper" "magical")
+                         :|timestamp| (local-time:now)))))
 
     (:method :GET :path "/api/v1/fortune-2" :name "fortune-2"
           :parameters (:query ((:category string :optional t :default "general")

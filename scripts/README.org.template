@@ -1,0 +1,109 @@
+#+TITLE: {{PROJECT_NAME}}
+#+AUTHOR: Generated from cl-jingle template
+#+DATE: {{DATE}}
+
+* {{PROJECT_TITLE}}
+
+A Common Lisp REST API server built with cl-jingle, featuring automatic Swagger UI documentation.
+
+** Features
+
+- RESTful API with automatic OpenAPI/Swagger documentation
+- Hot-reloadable development environment
+- Built-in Swagger UI for API exploration
+- JSON response handling
+- Error handling with proper HTTP status codes
+
+** Quick Start
+
+*** Prerequisites
+
+- SBCL (or other Common Lisp implementation)
+- Quicklisp
+
+*** Running the Server
+
+#+BEGIN_SRC bash
+# Start the development server
+./start-server.sh
+#+END_SRC
+
+The server will start on port 8080 by default.
+
+- *Swagger UI*: http://localhost:8080/api/docs/
+- *API JSON*: http://localhost:8080/api/v1/swagger.json
+
+*** Development
+
+#+BEGIN_SRC lisp
+;; Load the system
+(ql:quickload :{{PROJECT_NAME}})
+
+;; Start the server
+({{PACKAGE_NAME}}.server:start-server)
+
+;; Restart the server (useful during development)
+({{PACKAGE_NAME}}.api:restart-server)
+#+END_SRC
+
+** API Endpoints
+
+| Method | Path            | Description                  |
+|--------+-----------------+------------------------------|
+| GET    | /api/v1/ping    | Health check                 |
+| POST   | /api/v1/echo    | Echo back JSON message       |
+
+*** Example Usage
+
+#+BEGIN_SRC bash
+# Test the ping endpoint
+curl http://localhost:8080/api/v1/ping
+
+# Test the echo endpoint
+curl -X POST http://localhost:8080/api/v1/echo \
+     -H "Content-Type: application/json" \
+     -d '{"message": "Hello, World!"}'
+#+END_SRC
+
+** Project Structure
+
+#+BEGIN_EXAMPLE
+{{PROJECT_NAME}}/
+├── {{PROJECT_NAME}}.asd          # ASDF system definition
+├── README.org                     # This file
+├── start-server.sh               # Server startup script
+├── src/
+│   ├── api.lisp                  # API endpoint definitions
+│   └── server.lisp               # Server management
+└── swagger-ui/                   # Swagger UI static files
+    ├── index.html
+    ├── swagger-ui-bundle.js
+    └── ...
+#+END_EXAMPLE
+
+** Adding New Endpoints
+
+Edit =src/api.lisp= and add new routes to the =*urls*= parameter:
+
+#+BEGIN_SRC lisp
+(defparameter *urls*
+  `((:method :GET :path "/api/v1/ping" :handler ,#'ping-handler :name "ping")
+    ;; Add your new routes here
+    (:method :GET :path "/api/v1/hello" :handler ,#'hello-handler :name "hello"))
+  "The URLs map of our API")
+#+END_SRC
+
+Then use the hot-reload functionality:
+
+#+BEGIN_SRC lisp
+;; Reload code and refresh routes
+({{PACKAGE_NAME}}.api:reload-code)
+#+END_SRC
+
+** License
+
+BSD 2-Clause License
+
+** Credits
+
+Generated from the [[https://github.com/dnaeon/cl-jingle][cl-jingle]] project template.

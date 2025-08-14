@@ -14,4 +14,12 @@ demo-docker:
 demo-test:
 	./scripts/run-demo-tests.sh
 
-.PHONY: demo demo-doc demo-docker demo-test
+create-project:
+	@if [ -z "$(PROJECT)" ]; then \
+		echo "Usage: make create-project PROJECT=<project-name>"; \
+		echo "Example: make create-project PROJECT=my-awesome-api"; \
+		exit 1; \
+	fi
+	./scripts/create-project.sh $(PROJECT)
+
+.PHONY: demo demo-doc demo-docker demo-test create-project
