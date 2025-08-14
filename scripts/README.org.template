@@ -25,7 +25,7 @@ A Common Lisp REST API server built with cl-jingle, featuring automatic Swagger 
 
 #+BEGIN_SRC bash
 # Start the development server
-./start-server.sh
+./bin/start-server.sh
 #+END_SRC
 
 The server will start on port 8080 by default.
@@ -71,7 +71,8 @@ curl -X POST http://localhost:8080/api/v1/echo \
 {{PROJECT_NAME}}/
 ├── {{PROJECT_NAME}}.asd          # ASDF system definition
 ├── README.org                     # This file
-├── start-server.sh               # Server startup script
+├── bin/
+│   └── start-server.sh           # Server startup script
 ├── src/
 │   ├── api.lisp                  # API endpoint definitions
 │   └── server.lisp               # Server management

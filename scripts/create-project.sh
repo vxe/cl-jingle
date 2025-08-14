@@ -31,6 +31,7 @@ echo "Creating project: $PROJECT_NAME"
 
 # Create project directory structure
 mkdir -p "$PROJECT_DIR/src"
+mkdir -p "$PROJECT_DIR/bin"
 mkdir -p "$PROJECT_DIR/swagger-ui"
 
 # Copy swagger-ui files from demo
@@ -319,9 +320,9 @@ sed -e "s/{{PROJECT_NAME}}/$PROJECT_NAME/g" \
 # Generate start-server.sh from template
 sed -e "s/{{PROJECT_NAME}}/$PROJECT_NAME/g" \
     -e "s/{{PACKAGE_NAME}}/$PACKAGE_NAME/g" \
-    "$(dirname "$0")/start-server.sh.template" > "$PROJECT_DIR/start-server.sh"
+    "$(dirname "$0")/start-server.sh.template" > "$PROJECT_DIR/bin/start-server.sh"
 
-chmod +x "$PROJECT_DIR/start-server.sh"
+chmod +x "$PROJECT_DIR/bin/start-server.sh"
 
 # Generate server.lisp file
 cat > "$PROJECT_DIR/src/server.lisp" << EOF
@@ -373,5 +374,5 @@ echo "✅ Project structure created successfully!"
 echo "📁 Project directory: $PROJECT_DIR"
 echo "📋 Next steps:"
 echo "   1. cd $PROJECT_DIR"
-echo "   2. ./start-server.sh (starts the Swagger server)"
+echo "   2. ./bin/start-server.sh (starts the Swagger server)"
 echo "   3. Open http://localhost:8080/api/docs/"
