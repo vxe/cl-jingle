@@ -2,6 +2,73 @@
 
 =jingle= is [[https://github.com/fukamachi/ningle][ningle]], but with bells and whistles.
 
+* New additions
+
+** Dynamic Swagger/OpenAPI Generation
+
+The =JINGLE.DEMO= system now includes a dynamic Swagger/OpenAPI specification
+generator that automatically creates API documentation from your route definitions.
+This means you define your routes once, and the Swagger UI updates automatically
+based on your code changes.
+
+*** Key Features
+
+- *Single Source of Truth*: Routes and API documentation are defined together in
+  the =*urls*= parameter - no need to maintain separate OpenAPI YAML files
+- *Type-Safe Parameter Specs*: Parameter definitions include type information
+  (string, integer, boolean) that automatically generate proper OpenAPI schemas
+- *Hot Reload Support*: Update routes without full server restart using the
+  =/api/v1/refresh-routes= endpoint or =(reload-code)= function from the REPL
+- *Automatic Schema Generation*: Path parameters, query parameters, and request
+  bodies are automatically converted to OpenAPI 3.0.3 format
+
+*** How It Works
+
+Routes are defined with rich metadata including parameter specifications:
+
+#+begin_src lisp
+  (:method :GET :path "/api/v1/fortune" :name "fortune"
+   :parameters (:query ((:category string :optional t :default "general")
+                        (:mood string :optional t :default "normal")))
+   :handler fortune-handler)
+#+end_src
+
+The dynamic generation flow:
+1. Routes are defined in =*urls*= with parameter specs
+2. The =/api/v1/swagger.json= endpoint is called by Swagger UI
+3. =generate-dynamic-swagger-spec= reads =*urls*= and converts to OpenAPI format
+4. Swagger UI displays the auto-generated documentation
+
+*** Dynamic Endpoints
+
+The demo includes several dynamic endpoints:
+- =/api/v1/swagger.json= - Full dynamic spec with all routes
+- =/api/v1/swagger-simple.json= - Only routes without parameters
+- =/api/v1/swagger-minimal.json= - Minimal test spec
+- =/api/v1/refresh-routes= (POST) - Refresh routes without server restart
+
+*** Updating Routes Dynamically
+
+From the REPL:
+#+begin_src lisp
+  ;; Reload code and refresh routes
+  (reload-code)
+
+  ;; Or just refresh routes from current *urls*
+  (refresh-routes-handler)
+
+  ;; Full server restart with code reload
+  (restart-server)
+#+end_src
+
+Or via HTTP:
+#+begin_src shell
+  curl -X POST http://localhost:8080/api/v1/refresh-routes
+#+end_src
+
+The Swagger UI automatically reflects changes when you refresh the page - no
+manual editing of OpenAPI specs required!
+
 * Requirements
 
 - [[https://www.quicklisp.org/beta/][Quicklisp]]
